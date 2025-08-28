@@ -2,7 +2,9 @@
 ComfyS3 seamlessly integrates with [Amazon S3](https://aws.amazon.com/en/s3/) in [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This open-source project provides custom nodes for effortless loading and saving of images, videos, and checkpoint models directly from S3 buckets within the ComfyUI graph interface.
 ## Updates from this repo
 I have forked the repo and added the  functionality to return the presigned URL of the uploadded image on the s3 bucket with timeout of 3600 sec
-- Mainly I have changed the file node/uploadfiles3.py for this
+- Mainly I have changed the file:
+- src/client_s3.py for generating the presigned url
+- src/node/uploadfiles3.py for this
 
 ## Installation
 
