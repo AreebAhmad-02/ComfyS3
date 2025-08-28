@@ -2,12 +2,8 @@ import os
 import boto3
 from .logger import logger
 from botocore.exceptions import NoCredentialsError
-from botocore.config import Config
-
 from dotenv import load_dotenv
 load_dotenv()
-
-
 class S3:
     def __init__(self, region, access_key, secret_key, bucket_name, endpoint_url):
         self.region = region
@@ -22,36 +18,40 @@ class S3:
             self.create_folder(self.input_dir)
         if not self.does_folder_exist(self.output_dir):
             self.create_folder(self.output_dir)
-
     def get_client(self):
         if not all([self.region, self.access_key, self.secret_key, self.bucket_name]):
             err = "Missing required S3 environment variables."
             logger.error(err)
-    
         try:
-            addressing_style = os.getenv("S3_ADDRESSING_STYLE", "auto")
-            if addressing_style not in ["auto", "virtual", "path"]:
-                logger.warning(f"Invalid S3_ADDRESSING_STYLE value: {addressing_style}, using 'auto' instead")
-                addressing_style = "auto"
-            s3_config = Config(
-                s3={
-                    'addressing_style': addressing_style  # S3 addressing_style: auto/virtual/path
-                }
-            )
-
             s3 = boto3.resource(
                 service_name='s3',
                 region_name=self.region,
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
-                endpoint_url=self.endpoint_url,
-                config=s3_config
+                endpoint_url=self.endpoint_url
             )
             return s3
         except Exception as e:
             err = f"Failed to create S3 client: {e}"
             logger.error(err)
-
+    def generate_presigned_url(self, key, expiration=3600):
+        try:
+            client = boto3.client(
+                "s3",
+                region_name=self.region,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                endpoint_url=self.endpoint_url
+            )
+            return client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket_name, "Key": key},
+                ExpiresIn=expiration
+            )
+        except Exception as e:
+            err = f"Failed to generate presigned URL: {e}"
+            logger.error(err)
+            return None
     def get_files(self, prefix):
         if self.does_folder_exist(prefix):
             try:
@@ -64,7 +64,6 @@ class S3:
                 logger.error(err)
         else:
             return []
-    
     def does_folder_exist(self, folder_name):
         try:
             bucket = self.s3_client.Bucket(self.bucket_name)
@@ -73,7 +72,6 @@ class S3:
         except Exception as e:
             err = f"Failed to check if folder exists in S3: {e}"
             logger.error(err)
-    
     def create_folder(self, folder_name):
         try:
             bucket = self.s3_client.Bucket(self.bucket_name)
@@ -81,7 +79,6 @@ class S3:
         except Exception as e:
             err = f"Failed to create folder in S3: {e}"
             logger.error(err)
-    
     def download_file(self, s3_path, local_path):
         local_dir = os.path.dirname(local_path)
         if not os.path.exists(local_dir):
@@ -96,7 +93,6 @@ class S3:
         except Exception as e:
             err = f"Failed to download file from S3: {e}"
             logger.error(err)
-
     def upload_file(self, local_path, s3_path):
         try:
             bucket = self.s3_client.Bucket(self.bucket_name)
@@ -108,7 +104,6 @@ class S3:
         except Exception as e:
             err = f"Failed to upload file to S3: {e}"
             logger.error(err)
-    
     def get_save_path(self, filename_prefix, image_width=0, image_height=0):
         def map_filename(filename):
             prefix_len = len(os.path.basename(filename_prefix))
@@ -118,22 +113,17 @@ class S3:
             except:
                 digits = 0
             return (digits, prefix)
-
         def compute_vars(input, image_width, image_height):
             input = input.replace("%width%", str(image_width))
             input = input.replace("%height%", str(image_height))
             return input
-
         filename_prefix = compute_vars(filename_prefix, image_width, image_height)
         subfolder = os.path.dirname(os.path.normpath(filename_prefix))
         filename = os.path.basename(os.path.normpath(filename_prefix))
-        
         full_output_folder_s3 = os.path.join(self.output_dir, subfolder)
-        
         # Check if the output folder exists, create it if it doesn't
         if not self.does_folder_exist(full_output_folder_s3):
             self.create_folder(full_output_folder_s3)
-
         try:
             # Continue with the counter calculation
             files = self.get_files(full_output_folder_s3)
@@ -145,11 +135,9 @@ class S3:
             )[0] + 1
         except (ValueError, KeyError):
             counter = 1
-        
         return full_output_folder_s3, filename, counter, subfolder, filename_prefix
-
-
 def get_s3_instance():
+    print("here is access key",os.getenv("S3_ACCESS_KEY"))
     try:
         s3_instance = S3(
             region=os.getenv("S3_REGION"),
